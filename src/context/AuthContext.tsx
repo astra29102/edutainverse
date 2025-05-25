@@ -64,12 +64,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from('users')
         .select('*')
         .eq('id', userId)
+        .limit(1)
         .single();
 
-      if (error) throw error;
-      
+      if (error) {
+        console.error('Error fetching user data:', error.message);
+        setUser(null);
+        return;
+      }
+
       if (userData) {
         setUser(userData as User);
+      } else {
+        setUser(null);
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
