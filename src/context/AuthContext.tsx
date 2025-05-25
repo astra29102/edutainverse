@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, Student, Admin } from '../types';
-import { supabase } from '../utils/supabase';
+import { supabase, hashPassword } from '../utils/supabase';
 
 interface AuthContextType {
   user: User | null;
@@ -27,26 +27,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     checkUser();
-    
-    // Subscribe to auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        fetchUserData(session.user.id);
-      } else {
-        setUser(null);
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const checkUser = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        await fetchUserData(session.user.id);
+      const { data: session } = await supabase.auth.getSession();
+      if (session?.session?.user?.id) {
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.session.user.id)
+          .single();
+
+        if (error) {
+          console.error('Error fetching user data:', error);
+          setUser(null);
+          return;
+        }
+
+        if (userData) {
+          setUser(userData as User);
+        } else {
+          setUser(null);
+        }
       } else {
         setUser(null);
       }
@@ -58,45 +61,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const fetchUserData = async (userId: string) => {
-    try {
-      const { data: userData, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .limit(1)
-        .single();
-
-      if (error) {
-        console.error('Error fetching user data:', error.message);
-        setUser(null);
-        return;
-      }
-
-      if (userData) {
-        setUser(userData as User);
-      } else {
-        setUser(null);
-      }
-    } catch (error) {
-      console.error('Error fetching user data:', error);
-      setUser(null);
-    }
-  };
-
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      const { data: { user }, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const hashedPassword = await hashPassword(password);
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .eq('password_hash', hashedPassword)
+        .single();
 
-      if (error) throw error;
-      
-      if (user) {
-        await fetchUserData(user.id);
+      if (error || !user) {
+        throw new Error('Invalid credentials');
       }
+
+      setUser(user as User);
     } catch (error) {
       console.error('Login failed:', error);
       throw error;
@@ -117,29 +97,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signup = async (name: string, email: string, password: string) => {
     setIsLoading(true);
     try {
-      const { data: { user }, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (signUpError) throw signUpError;
+      const hashedPassword = await hashPassword(password);
       
-      if (user) {
-        const { error: insertError } = await supabase
-          .from('users')
-          .insert([
-            {
-              id: user.id,
-              name,
-              email,
-              role: 'student',
-            }
-          ]);
+      const { data: newUser, error } = await supabase
+        .from('users')
+        .insert([
+          {
+            name,
+            email,
+            password_hash: hashedPassword,
+            role: 'student'
+          }
+        ])
+        .select()
+        .single();
 
-        if (insertError) throw insertError;
-        
-        await fetchUserData(user.id);
+      if (error) {
+        throw error;
       }
+
+      setUser(newUser as User);
     } catch (error) {
       console.error('Signup failed:', error);
       throw error;
