@@ -4,13 +4,25 @@ import { Database } from '../types/supabase';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables');
+}
+
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
-export const hashPassword = async (password: string): Promise<string> => {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+// Helper function to check if a user has a specific role
+export const hasRole = async (userId: string, role: 'student' | 'admin'): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .single();
+
+    if (error) throw error;
+    return data?.role === role;
+  } catch (error) {
+    console.error('Error checking user role:', error);
+    return false;
+  }
 };

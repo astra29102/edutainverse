@@ -29,7 +29,11 @@ const ProtectedRoute: React.FC<{
   const { isAuthenticated, user, isLoading } = useAuth();
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
   }
 
   if (!isAuthenticated) {
@@ -37,13 +41,16 @@ const ProtectedRoute: React.FC<{
   }
 
   if (requiredRole && user?.role !== requiredRole) {
-    return <Navigate to="/" replace />;
+    // Redirect students to student dashboard and admins to admin dashboard
+    return <Navigate to={user?.role === 'admin' ? '/admin' : '/dashboard'} replace />;
   }
 
   return <>{element}</>;
 };
 
 const Router: React.FC = () => {
+  const { user } = useAuth();
+
   return (
     <BrowserRouter>
       <Routes>
@@ -97,8 +104,16 @@ const Router: React.FC = () => {
           element={<ProtectedRoute element={<CourseAnalyticsPage />} requiredRole="admin" />}
         />
 
-        {/* Catch-all redirect */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Redirect to appropriate dashboard based on role */}
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to={user?.role === 'admin' ? '/admin' : user ? '/dashboard' : '/'}
+              replace
+            />
+          }
+        />
       </Routes>
     </BrowserRouter>
   );
